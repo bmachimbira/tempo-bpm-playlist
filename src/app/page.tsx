@@ -6,7 +6,20 @@ import { SpotifyArtist, BuildPlaylistResponse } from '@/lib/types';
 import ArtistSearch from '@/components/ArtistSearch';
 import SeedSongSearch, { SeedTrack } from '@/components/SeedSongSearch';
 import TrackRow from '@/components/TrackRow';
+import Logo from '@/components/Logo';
 import { stop as stopPreview } from '@/lib/previewPlayer';
+
+// Italian tempo marking for a BPM — a music-literate signature detail.
+function tempoMarking(bpm: number): string {
+  if (bpm <= 60) return 'Largo';
+  if (bpm <= 76) return 'Adagio';
+  if (bpm <= 108) return 'Andante';
+  if (bpm <= 120) return 'Moderato';
+  if (bpm <= 156) return 'Allegro';
+  if (bpm <= 176) return 'Vivace';
+  if (bpm <= 200) return 'Presto';
+  return 'Prestissimo';
+}
 
 interface SeedInfo {
   name: string;
@@ -197,7 +210,7 @@ export default function Home() {
         return;
       }
       if (data.bpm == null) {
-        setToast(`No BPM data found for "${t.name}" — try another song.`);
+        setToast(`No BPM data found for "${t.name}". Try another song.`);
         return;
       }
       setBpm(data.bpm);
@@ -281,12 +294,10 @@ export default function Home() {
       {/* Header */}
       <header className="flex items-center justify-between mb-10">
         <div className="flex items-center gap-3">
-          <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] shadow-lg">
-            <span className="text-xl">🎚️</span>
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight leading-none">Tempo</h1>
-            <p className="text-xs text-[var(--muted)]">BPM Playlist Builder</p>
+          <Logo size={46} />
+          <div className="leading-none">
+            <h1 className="text-[1.35rem] font-extrabold tracking-[-0.02em]">Tempo</h1>
+            <p className="label-spec mt-1">BPM · Playlist Engine</p>
           </div>
         </div>
         {auth.loggedIn ? (
@@ -294,15 +305,21 @@ export default function Home() {
             <span className="text-[var(--muted)] hidden sm:inline">
               {auth.user ? `Hi, ${auth.user}` : 'Connected'}
             </span>
-            <button onClick={logout} className="text-[var(--muted)] hover:text-white transition">
+            <button onClick={logout} className="text-[var(--muted)] hover:text-[var(--text)] transition">
               Log out
             </button>
           </div>
         ) : (
           <a
             href="/api/auth/login"
-            className="text-sm rounded-full border border-white/15 px-4 py-2 hover:bg-white/5 transition"
+            className="inline-flex items-center gap-2 text-sm font-medium rounded-full px-4 py-2 transition"
+            style={{
+              color: 'var(--spotify)',
+              border: '1px solid color-mix(in oklch, var(--spotify) 45%, transparent)',
+              background: 'color-mix(in oklch, var(--spotify) 10%, transparent)',
+            }}
           >
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--spotify)' }} />
             Connect Spotify
           </a>
         )}
@@ -312,16 +329,30 @@ export default function Home() {
       <section className="grid lg:grid-cols-[340px_1fr] gap-6">
         {/* BPM dial */}
         <div className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur p-6 flex flex-col items-center justify-center text-center">
-          <p className="text-sm text-[var(--muted)] mb-2">Target tempo</p>
-          <div className="relative my-2">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="relative grid place-items-center w-2.5 h-2.5">
+              <span
+                className="absolute inset-0 rounded-full"
+                style={{ background: 'var(--amber)', animation: 'tempo-beat 1.2s ease-out infinite' }}
+              />
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--amber)' }} />
+            </span>
+            <p className="label-spec">Target tempo</p>
+          </div>
+          <div className="relative">
             <div
-              className="text-7xl font-black tabular-nums bg-gradient-to-b from-white to-[var(--accent)] bg-clip-text text-transparent select-none"
-              style={{ lineHeight: 1 }}
+              className="text-[5.5rem] font-black tabular-nums leading-none select-none"
+              style={{ color: 'var(--amber)', textShadow: '0 6px 30px oklch(0.82 0.135 80 / 0.25)' }}
             >
               {bpm}
             </div>
-            <div className="text-sm text-[var(--muted)] mt-1 tracking-widest uppercase">
-              Beats / min
+            <div className="label-spec mt-2">Beats per minute</div>
+            <div
+              className="mt-3 inline-block text-sm font-medium tracking-[0.14em]"
+              style={{ color: 'var(--accent-2)' }}
+              title="Italian tempo marking for this BPM"
+            >
+              {tempoMarking(bpm)}
             </div>
           </div>
           <input
@@ -378,7 +409,7 @@ export default function Home() {
             <label className="text-sm font-medium block mb-1">
               Match a song{' '}
               <span className="text-[var(--muted)] font-normal">
-                — copies its BPM, artist &amp; genre, then builds
+                : copies its BPM, artist &amp; genre, then builds
               </span>
             </label>
             <SeedSongSearch onPick={handlePickSeed} loading={seedLoading} />
@@ -538,7 +569,12 @@ export default function Home() {
           <button
             onClick={generate}
             disabled={loading}
-            className="w-full rounded-2xl py-4 font-bold text-black bg-gradient-to-r from-[var(--accent)] to-[#7ee787] hover:brightness-105 active:scale-[0.99] transition disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-[var(--accent)]/20"
+            className="w-full rounded-2xl py-4 font-bold tracking-[0.01em] active:scale-[0.99] transition disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{
+              background: 'var(--amber)',
+              color: 'var(--bg)',
+              boxShadow: '0 10px 34px oklch(0.82 0.135 80 / 0.28)',
+            }}
           >
             {loading ? (
               <span className="inline-flex items-center gap-2">
@@ -553,7 +589,13 @@ export default function Home() {
       </section>
 
       {error && (
-        <div className="mt-6 rounded-xl border border-[var(--accent-3)]/40 bg-[var(--accent-3)]/10 px-4 py-3 text-sm fade-up">
+        <div
+          className="mt-6 rounded-xl px-4 py-3 text-sm fade-up"
+          style={{
+            border: '1px solid color-mix(in oklch, var(--accent-3) 45%, transparent)',
+            background: 'color-mix(in oklch, var(--accent-3) 12%, transparent)',
+          }}
+        >
           {error}
         </div>
       )}
@@ -588,13 +630,17 @@ export default function Home() {
               <button
                 onClick={() => exportToSpotify()}
                 disabled={exporting || result.tracks.length === 0}
-                className="rounded-full px-5 py-2 text-sm font-semibold text-black bg-[var(--accent)] hover:brightness-105 transition disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold hover:brightness-105 transition disabled:opacity-60"
+                style={{ background: 'var(--spotify)', color: 'var(--spotify-ink)' }}
               >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm4.6 14.4a.62.62 0 01-.86.21c-2.35-1.44-5.3-1.76-8.8-.96a.62.62 0 11-.28-1.22c3.83-.87 7.1-.5 9.73 1.11a.62.62 0 01.21.86zm1.23-2.73a.78.78 0 01-1.07.26c-2.69-1.65-6.79-2.13-9.97-1.17a.78.78 0 11-.45-1.49c3.63-1.1 8.15-.56 11.24 1.33a.78.78 0 01.25 1.07zm.11-2.85C14.41 8.96 8.9 8.76 5.7 9.73a.93.93 0 11-.54-1.78c3.68-1.12 9.76-.9 13.6 1.39a.93.93 0 01-.96 1.6z" />
+                </svg>
                 {exporting
                   ? 'Saving…'
                   : auth.loggedIn
                   ? 'Save to Spotify'
-                  : 'Connect & save to Spotify'}
+                  : 'Connect & save'}
               </button>
             </div>
           </div>
@@ -604,9 +650,13 @@ export default function Home() {
               href={exportUrl}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-2 mb-4 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-4 py-3 text-sm hover:bg-[var(--accent)]/15 transition fade-up"
+              className="flex items-center gap-2 mb-4 rounded-xl px-4 py-3 text-sm transition fade-up"
+              style={{
+                border: '1px solid color-mix(in oklch, var(--spotify) 45%, transparent)',
+                background: 'color-mix(in oklch, var(--spotify) 12%, transparent)',
+              }}
             >
-              ✓ Playlist created — open it in Spotify ↗
+              <span style={{ color: 'var(--spotify)' }}>✓</span> Playlist created. Open it in Spotify ↗
             </a>
           )}
 

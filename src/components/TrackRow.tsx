@@ -104,9 +104,9 @@ export default function TrackRow({ track, index }: { track: Track; index: number
       <span
         className="inline-flex items-baseline gap-1 rounded-lg px-2.5 py-1 text-sm font-semibold tabular-nums"
         style={{
-          background: 'rgba(30,215,96,0.12)',
-          color: 'var(--accent)',
-          border: '1px solid rgba(30,215,96,0.25)',
+          background: 'color-mix(in oklch, var(--amber) 12%, transparent)',
+          color: 'var(--amber)',
+          border: '1px solid color-mix(in oklch, var(--amber) 28%, transparent)',
         }}
         title={
           track.tempoMatchKind && track.tempoMatchKind !== 'exact'

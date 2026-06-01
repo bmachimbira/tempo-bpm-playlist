@@ -22,19 +22,46 @@ function classifyTempo(
   return null;
 }
 
-/** De-duplicate tracks by id, then by name+primary-artist (different masters of same song). */
+// Keywords that mark a track as an alternate version of a song we likely already
+// have (live cuts, radio edits, remasters, remixes, etc.). Used to demote them.
+const VARIANT_RE =
+  /\b(live|remix|acoustic|remaster(?:ed)?|radio\s*edit|extended|mono|stereo|single\s*version|instrumental|demo|re-?recorded|sped\s*up|slowed|karaoke|reprise|edit|version|mix|session)\b/i;
+
+/** Strip feat./with credits, parentheticals, and " - <qualifier>" suffixes to a base title. */
+function baseTitle(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[([][^)\]]*[)\]]/g, ' ') // (feat. …), [Remix], (Live) …
+    .replace(/\s-\s.*$/, ' ') // " - Radio Edit", " - 2011 Remaster"
+    .replace(/[^\p{L}\p{N} ]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Higher = preferred version to keep within a duplicate group. */
+function versionScore(t: Track): number {
+  let s = t.popularity ?? 0;
+  if (VARIANT_RE.test(t.name)) s -= 60; // strongly demote live/remix/remaster/edit
+  if (/[([]/.test(t.name)) s -= 5; // mild nudge away from parenthetical variants
+  return s;
+}
+
+/**
+ * Collapse duplicates: same Spotify id, and same base title + primary artist
+ * (so "Levitating", "Levitating (feat. DaBaby)" and "Levitating - Live" become
+ * one entry — the highest-scoring canonical version).
+ */
 function dedupe(tracks: Track[]): Track[] {
   const byId = new Map<string, Track>();
   for (const t of tracks) if (!byId.has(t.id)) byId.set(t.id, t);
-  const seenName = new Set<string>();
-  const out: Track[] = [];
+
+  const groups = new Map<string, Track>();
   for (const t of Array.from(byId.values())) {
-    const key = `${t.name.toLowerCase().trim()}::${t.artists[0]?.name.toLowerCase().trim()}`;
-    if (seenName.has(key)) continue;
-    seenName.add(key);
-    out.push(t);
+    const key = `${baseTitle(t.name)}::${(t.artists[0]?.name ?? '').toLowerCase().trim()}`;
+    const cur = groups.get(key);
+    if (!cur || versionScore(t) > versionScore(cur)) groups.set(key, t);
   }
-  return out;
+  return Array.from(groups.values());
 }
 
 export async function buildPlaylist(req: BuildPlaylistRequest): Promise<BuildPlaylistResponse> {

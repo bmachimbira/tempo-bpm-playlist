@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     const expectedState = req.cookies.get('sp_state')?.value;
     if (!code) return NextResponse.json({ error: 'Missing code' }, { status: 400 });
     if (!expectedState || state !== expectedState) {
-      return NextResponse.json({ error: 'State mismatch — try logging in again.' }, { status: 400 });
+      return NextResponse.json({ error: 'State mismatch. Try logging in again.' }, { status: 400 });
     }
 
     const tokens = await exchangeCodeForToken(code);

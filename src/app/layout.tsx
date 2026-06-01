@@ -14,7 +14,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Tempo — BPM Playlist Builder",
+  title: "Tempo · BPM Playlist Builder",
   description: "Find tracks at your target BPM and build a Spotify playlist.",
 };
 
