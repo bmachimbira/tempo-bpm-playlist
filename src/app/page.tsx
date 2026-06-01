@@ -1,101 +1,639 @@
-import Image from "next/image";
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { GENRES } from '@/lib/genres';
+import { SpotifyArtist, BuildPlaylistResponse } from '@/lib/types';
+import ArtistSearch from '@/components/ArtistSearch';
+import SeedSongSearch, { SeedTrack } from '@/components/SeedSongSearch';
+import TrackRow from '@/components/TrackRow';
+import { stop as stopPreview } from '@/lib/previewPlayer';
+
+interface SeedInfo {
+  name: string;
+  artist: string;
+  bpm: number;
+  genres: string[];
+  albumArt: string | null;
+}
+
+const RESULT_KEY = 'tempo_result';
+const PENDING_EXPORT = 'tempo_pending_export';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [bpm, setBpm] = useState(120);
+  const [tolerance, setTolerance] = useState(6);
+  const [genres, setGenres] = useState<string[]>([]);
+  const [artists, setArtists] = useState<SpotifyArtist[]>([]);
+  const [excludeArtists, setExcludeArtists] = useState<SpotifyArtist[]>([]);
+  const [allowHalfDouble, setAllowHalfDouble] = useState(true);
+  const [energyOn, setEnergyOn] = useState(false);
+  const [energy, setEnergy] = useState<[number, number]>([0.4, 1]);
+  const [limit, setLimit] = useState(30);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const [seed, setSeed] = useState<SeedInfo | null>(null);
+  const [seedLoading, setSeedLoading] = useState(false);
+  const [pendingBuild, setPendingBuild] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<BuildPlaylistResponse | null>(null);
+
+  const [auth, setAuth] = useState<{ loggedIn: boolean; user: string | null }>({
+    loggedIn: false,
+    user: null,
+  });
+  const [exporting, setExporting] = useState(false);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  // ---- OAuth callback + session restore -----------------------------------
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(RESULT_KEY);
+      if (saved) setResult(JSON.parse(saved));
+    } catch {}
+
+    async function init() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const state = params.get('state');
+      if (code) {
+        try {
+          const res = await fetch('/api/auth/callback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, state }),
+          });
+          const data = await res.json();
+          if (data.ok) setAuth({ loggedIn: true, user: data.user?.name ?? null });
+          else setToast(data.error || 'Login failed');
+        } catch {
+          setToast('Login failed');
+        }
+        window.history.replaceState({}, '', '/');
+      }
+      try {
+        const s = await fetch('/api/auth/status').then((r) => r.json());
+        if (s.loggedIn) setAuth({ loggedIn: true, user: s.user });
+      } catch {}
+    }
+    init();
+  }, []);
+
+  // ---- Export to Spotify --------------------------------------------------
+  const exportToSpotify = useCallback(
+    async (silent = false) => {
+      if (!result || result.tracks.length === 0) return;
+      setExporting(true);
+      setExportUrl(null);
+      setError(null);
+      try {
+        const name = `${bpm} BPM${genres.length ? ' · ' + genres.slice(0, 2).join(', ') : ''}${
+          artists.length ? ' · ' + artists.map((a) => a.name).slice(0, 2).join(', ') : ''
+        }`;
+        const res = await fetch('/api/playlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            description: `Tracks around ${bpm} BPM (±${tolerance}). Built with Tempo.`,
+            uris: result.tracks.map((t) => t.uri),
+            isPublic: false,
+          }),
+        });
+        if (res.status === 401) {
+          sessionStorage.setItem(PENDING_EXPORT, '1');
+          window.location.href = '/api/auth/login';
+          return;
+        }
+        const data = await res.json();
+        if (data.ok) {
+          setExportUrl(data.url);
+          setToast('Playlist created in your Spotify ✓');
+        } else {
+          setError(data.error || 'Export failed');
+        }
+      } catch {
+        setError('Export failed');
+      } finally {
+        setExporting(false);
+        if (!silent) sessionStorage.removeItem(PENDING_EXPORT);
+      }
+    },
+    [result, bpm, genres, artists, tolerance],
+  );
+
+  useEffect(() => {
+    if (auth.loggedIn && result && sessionStorage.getItem(PENDING_EXPORT) === '1') {
+      sessionStorage.removeItem(PENDING_EXPORT);
+      exportToSpotify(true);
+    }
+  }, [auth.loggedIn, result, exportToSpotify]);
+
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 3500);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
+
+  // ---- Generate -----------------------------------------------------------
+  async function generate() {
+    stopPreview();
+    setLoading(true);
+    setError(null);
+    setExportUrl(null);
+    try {
+      const res = await fetch('/api/build', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bpm,
+          tolerance,
+          genres,
+          artistIds: artists.map((a) => a.id),
+          artistNames: artists.map((a) => a.name),
+          excludeArtistIds: excludeArtists.map((a) => a.id),
+          excludeArtistNames: excludeArtists.map((a) => a.name),
+          allowHalfDouble,
+          minEnergy: energyOn ? energy[0] : undefined,
+          maxEnergy: energyOn ? energy[1] : undefined,
+          limit,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Something went wrong');
+        setResult(null);
+      } else {
+        setResult(data);
+        sessionStorage.setItem(RESULT_KEY, JSON.stringify(data));
+        setTimeout(
+          () => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+          100,
+        );
+      }
+    } catch {
+      setError('Network error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ---- Seed song: read a song's BPM + artist + genre, then match ----------
+  async function handlePickSeed(t: SeedTrack) {
+    setSeedLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/seed?trackId=${encodeURIComponent(t.id)}&artistId=${encodeURIComponent(
+          t.artistId ?? '',
+        )}`,
+      );
+      const data = await res.json();
+      if (data.error) {
+        setToast(data.error);
+        return;
+      }
+      if (data.bpm == null) {
+        setToast(`No BPM data found for "${t.name}" — try another song.`);
+        return;
+      }
+      setBpm(data.bpm);
+      if (Array.isArray(data.genres) && data.genres.length) setGenres(data.genres);
+      if (t.artistId) setArtists([{ id: t.artistId, name: t.artistName || data.artistName }]);
+      setSeed({
+        name: t.name,
+        artist: t.artistName,
+        bpm: data.bpm,
+        genres: Array.isArray(data.genres) ? data.genres : [],
+        albumArt: t.albumArt,
+      });
+      setPendingBuild(true); // auto-build once state settles
+    } catch {
+      setToast('Could not analyze that song.');
+    } finally {
+      setSeedLoading(false);
+    }
+  }
+
+  // Fire the build after seed-derived state has committed.
+  useEffect(() => {
+    if (pendingBuild) {
+      setPendingBuild(false);
+      generate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingBuild]);
+
+  function clearSeed() {
+    setSeed(null);
+  }
+
+  function toggleGenre(g: string) {
+    setGenres((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+  }
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setAuth({ loggedIn: false, user: null });
+    setExportUrl(null);
+  }
+
+  function downloadCsv() {
+    if (!result) return;
+    const rows = [
+      ['#', 'Track', 'Artist', 'Album', 'BPM', 'Spotify URL'],
+      ...result.tracks.map((t, i) => [
+        String(i + 1),
+        t.name,
+        t.artistNames,
+        t.album,
+        String(t.bpm ?? ''),
+        t.spotifyUrl,
+      ]),
+    ];
+    const csv = rows
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tempo-${bpm}bpm.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function copyLinks() {
+    if (!result) return;
+    await navigator.clipboard.writeText(result.tracks.map((t) => t.spotifyUrl).join('\n'));
+    setToast('Track links copied to clipboard');
+  }
+
+  const totalMin = result
+    ? Math.round(result.tracks.reduce((s, t) => s + t.durationMs, 0) / 60000)
+    : 0;
+
+  return (
+    <main className="mx-auto max-w-5xl px-4 sm:px-6 py-10 sm:py-14">
+      {/* Header */}
+      <header className="flex items-center justify-between mb-10">
+        <div className="flex items-center gap-3">
+          <div className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] shadow-lg">
+            <span className="text-xl">🎚️</span>
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight leading-none">Tempo</h1>
+            <p className="text-xs text-[var(--muted)]">BPM Playlist Builder</p>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+        {auth.loggedIn ? (
+          <div className="flex items-center gap-3 text-sm">
+            <span className="text-[var(--muted)] hidden sm:inline">
+              {auth.user ? `Hi, ${auth.user}` : 'Connected'}
+            </span>
+            <button onClick={logout} className="text-[var(--muted)] hover:text-white transition">
+              Log out
+            </button>
+          </div>
+        ) : (
+          <a
+            href="/api/auth/login"
+            className="text-sm rounded-full border border-white/15 px-4 py-2 hover:bg-white/5 transition"
+          >
+            Connect Spotify
+          </a>
+        )}
+      </header>
+
+      {/* Hero / controls */}
+      <section className="grid lg:grid-cols-[340px_1fr] gap-6">
+        {/* BPM dial */}
+        <div className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur p-6 flex flex-col items-center justify-center text-center">
+          <p className="text-sm text-[var(--muted)] mb-2">Target tempo</p>
+          <div className="relative my-2">
+            <div
+              className="text-7xl font-black tabular-nums bg-gradient-to-b from-white to-[var(--accent)] bg-clip-text text-transparent select-none"
+              style={{ lineHeight: 1 }}
+            >
+              {bpm}
+            </div>
+            <div className="text-sm text-[var(--muted)] mt-1 tracking-widest uppercase">
+              Beats / min
+            </div>
+          </div>
+          <input
+            type="range"
+            min={40}
+            max={220}
+            value={bpm}
+            onChange={(e) => setBpm(Number(e.target.value))}
+            className="w-full mt-4"
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+          <div className="flex items-center justify-between w-full mt-2 text-xs text-[var(--muted)]">
+            <span>40</span>
+            <span>220</span>
+          </div>
+
+          <div className="grid grid-cols-4 gap-1.5 mt-4 w-full">
+            {([
+              ['Chill', 70],
+              ['Groove', 100],
+              ['Dance', 124],
+              ['Run', 170],
+            ] as [string, number][]).map(([label, v]) => (
+              <button
+                key={label}
+                onClick={() => setBpm(v)}
+                className="rounded-lg border border-white/10 py-1.5 text-xs hover:bg-white/5 transition"
+              >
+                {label}
+                <span className="block text-[10px] text-[var(--muted)]">{v}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="w-full mt-5">
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-[var(--muted)]">Tolerance</span>
+              <span className="tabular-nums">±{tolerance} BPM</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={20}
+              value={tolerance}
+              onChange={(e) => setTolerance(Number(e.target.value))}
+              className="w-full"
+            />
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="rounded-3xl border border-[var(--panel-border)] bg-[var(--panel)] backdrop-blur p-6 space-y-6">
+          {/* Seed song */}
+          <div>
+            <label className="text-sm font-medium block mb-1">
+              Match a song{' '}
+              <span className="text-[var(--muted)] font-normal">
+                — copies its BPM, artist &amp; genre, then builds
+              </span>
+            </label>
+            <SeedSongSearch onPick={handlePickSeed} loading={seedLoading} />
+            {seed && (
+              <div className="mt-3 flex items-center gap-3 rounded-xl border border-[var(--accent-2)]/35 bg-[var(--accent-2)]/10 px-3 py-2 fade-up">
+                {seed.albumArt ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={seed.albumArt} alt="" className="w-9 h-9 rounded object-cover" />
+                ) : (
+                  <span className="w-9 h-9 rounded bg-white/10" />
+                )}
+                <div className="min-w-0 flex-1 text-sm">
+                  <div className="truncate">
+                    Matching <span className="font-semibold">{seed.name}</span> · {seed.artist}
+                  </div>
+                  <div className="text-xs text-[var(--muted)]">
+                    {seed.bpm} BPM{seed.genres.length ? ' · ' + seed.genres.join(', ') : ''}
+                  </div>
+                </div>
+                <button
+                  onClick={clearSeed}
+                  className="text-[var(--muted)] hover:text-white transition text-sm"
+                  aria-label="Clear seed song"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="h-px bg-white/8" />
+
+          <div>
+            <label className="text-sm font-medium block mb-3">Genres</label>
+            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-1">
+              {GENRES.map((g) => {
+                const on = genres.includes(g);
+                return (
+                  <button
+                    key={g}
+                    onClick={() => toggleGenre(g)}
+                    className={`rounded-full px-3 py-1.5 text-sm capitalize border transition ${
+                      on
+                        ? 'bg-[var(--accent)] text-black border-transparent font-medium'
+                        : 'border-white/12 text-[var(--text)] hover:bg-white/5'
+                    }`}
+                  >
+                    {g.replace(/-/g, ' ')}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium block mb-3">
+                Include singers / artists
+              </label>
+              <ArtistSearch
+                selected={artists}
+                onAdd={(a) =>
+                  setArtists((p) => (p.find((x) => x.id === a.id) ? p : [...p, a]))
+                }
+                onRemove={(id) => setArtists((p) => p.filter((x) => x.id !== id))}
+                placeholder="Search artists to include…"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-3">
+                Exclude artists{' '}
+                <span className="text-[var(--muted)] font-normal">(never include)</span>
+              </label>
+              <ArtistSearch
+                selected={excludeArtists}
+                onAdd={(a) =>
+                  setExcludeArtists((p) => (p.find((x) => x.id === a.id) ? p : [...p, a]))
+                }
+                onRemove={(id) => setExcludeArtists((p) => p.filter((x) => x.id !== id))}
+                tone="exclude"
+                placeholder="Search artists to exclude…"
+              />
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span>Playlist size</span>
+                <span className="tabular-nums text-[var(--muted)]">{limit} tracks</span>
+              </div>
+              <input
+                type="range"
+                min={10}
+                max={80}
+                step={5}
+                value={limit}
+                onChange={(e) => setLimit(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+            <div className="flex flex-col gap-2 justify-center">
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={allowHalfDouble}
+                  onChange={(e) => setAllowHalfDouble(e.target.checked)}
+                  className="accent-[var(--accent)] w-4 h-4"
+                />
+                Include half / double-time matches
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={energyOn}
+                  onChange={(e) => setEnergyOn(e.target.checked)}
+                  className="accent-[var(--accent)] w-4 h-4"
+                />
+                Filter by energy
+              </label>
+            </div>
+          </div>
+
+          {energyOn && (
+            <div className="fade-up">
+              <div className="flex justify-between text-xs mb-1 text-[var(--muted)]">
+                <span>Min energy: {energy[0].toFixed(2)}</span>
+                <span>Max: {energy[1].toFixed(2)}</span>
+              </div>
+              <div className="flex gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={energy[0]}
+                  onChange={(e) =>
+                    setEnergy([Math.min(Number(e.target.value), energy[1]), energy[1]])
+                  }
+                  className="w-full"
+                />
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={energy[1]}
+                  onChange={(e) =>
+                    setEnergy([energy[0], Math.max(Number(e.target.value), energy[0])])
+                  }
+                  className="w-full"
+                />
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={generate}
+            disabled={loading}
+            className="w-full rounded-2xl py-4 font-bold text-black bg-gradient-to-r from-[var(--accent)] to-[#7ee787] hover:brightness-105 active:scale-[0.99] transition disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-[var(--accent)]/20"
+          >
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="spin inline-block w-4 h-4 border-2 border-black/30 border-t-black rounded-full" />
+                Finding tracks…
+              </span>
+            ) : (
+              'Build playlist'
+            )}
+          </button>
+        </div>
+      </section>
+
+      {error && (
+        <div className="mt-6 rounded-xl border border-[var(--accent-3)]/40 bg-[var(--accent-3)]/10 px-4 py-3 text-sm fade-up">
+          {error}
+        </div>
+      )}
+
+      {/* Results */}
+      {result && (
+        <section ref={resultsRef} className="mt-10 fade-up">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-2xl font-bold">Your {bpm} BPM playlist</h2>
+              <p className="text-sm text-[var(--muted)] mt-1">
+                {result.tracks.length} tracks · ~{totalMin} min · matched from{' '}
+                {result.stats.enriched} analyzed of {result.stats.candidatePool} candidates
+              </p>
+              <p className="text-xs text-[var(--muted)] mt-1 opacity-80">
+                ▶ Hit play on any track to preview a 30s snippet
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={copyLinks}
+                className="rounded-full border border-white/15 px-4 py-2 text-sm hover:bg-white/5 transition"
+              >
+                Copy links
+              </button>
+              <button
+                onClick={downloadCsv}
+                className="rounded-full border border-white/15 px-4 py-2 text-sm hover:bg-white/5 transition"
+              >
+                Download CSV
+              </button>
+              <button
+                onClick={() => exportToSpotify()}
+                disabled={exporting || result.tracks.length === 0}
+                className="rounded-full px-5 py-2 text-sm font-semibold text-black bg-[var(--accent)] hover:brightness-105 transition disabled:opacity-60"
+              >
+                {exporting
+                  ? 'Saving…'
+                  : auth.loggedIn
+                  ? 'Save to Spotify'
+                  : 'Connect & save to Spotify'}
+              </button>
+            </div>
+          </div>
+
+          {exportUrl && (
+            <a
+              href={exportUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 mb-4 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-4 py-3 text-sm hover:bg-[var(--accent)]/15 transition fade-up"
+            >
+              ✓ Playlist created — open it in Spotify ↗
+            </a>
+          )}
+
+          {result.tracks.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-[var(--panel)] p-8 text-center text-[var(--muted)]">
+              No tracks matched. Try widening the tolerance, enabling half/double-time, or picking
+              broader genres/artists.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-[var(--panel)] backdrop-blur divide-y divide-white/5 overflow-hidden">
+              {result.tracks.map((t, i) => (
+                <TrackRow key={t.id} track={t} index={i} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      <footer className="mt-16 text-center text-xs text-[var(--muted)]">
+        BPM data via ReccoBeats · Previews via Spotify embed (iTunes / Deezer fallback) · Catalog &amp; playlists via Spotify
       </footer>
-    </div>
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white text-black text-sm font-medium px-5 py-2.5 shadow-2xl fade-up z-50">
+          {toast}
+        </div>
+      )}
+    </main>
   );
 }

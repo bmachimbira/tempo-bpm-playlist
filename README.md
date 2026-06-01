@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎚️ Tempo — BPM Playlist Builder
 
-## Getting Started
+Pick a **BPM**, choose **genres** and **singers/artists**, and Tempo finds tracks at that
+tempo and assembles a playlist you can save straight into your Spotify account.
 
-First, run the development server:
+## How it works
+
+Spotify deprecated its `audio-features` (tempo) and `recommendations` endpoints for apps
+created after Nov 2024 — so this app can't read BPM from Spotify directly. Instead:
+
+1. **Spotify Web API** builds a candidate pool from your chosen genres / artists.
+2. **[ReccoBeats](https://reccobeats.com)** (a free, no-key drop-in replacement for Spotify's
+   audio-features) returns the **tempo** for each candidate by Spotify track ID.
+3. Tracks are filtered to your **target BPM ± tolerance** (optionally allowing half/double-time
+   matches), ranked by closeness then popularity.
+4. **Connect Spotify** (OAuth) and the playlist is created in your account in one click. You can
+   also export a CSV or copy the track links.
+
+## Features
+
+- 🎚️ Big BPM dial (40–220) with quick presets + tolerance control
+- 🏷️ Multi-select genre chips and artist/singer autocomplete
+- ⚡ Optional energy filter and half/double-time tempo matching
+- 🎧 30-second previews, album art, per-track BPM badges, total duration
+- 💚 One-click "Save to Spotify", plus CSV download and copy-links export
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # then fill in your Spotify credentials
+npm run dev                  # must run on http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open **http://localhost:3000**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment (`.env.local`)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+SPOTIFY_CLIENT_ID=...
+SPOTIFY_CLIENT_SECRET=...
+SPOTIFY_REDIRECT_URI=http://localhost:3000
+```
 
-## Learn More
+> **Port matters.** The OAuth redirect URI must *exactly* match one registered in your
+> [Spotify dashboard](https://developer.spotify.com/dashboard). This project is configured for
+> `http://localhost:3000`, so the dev server must run on port 3000 for the "Save to Spotify"
+> step to work. (Building/previewing playlists works on any port; only the OAuth save needs 3000.)
 
-To learn more about Next.js, take a look at the following resources:
+## Tech
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Next.js 14 (App Router) · TypeScript · Tailwind CSS · Spotify Web API · ReccoBeats
