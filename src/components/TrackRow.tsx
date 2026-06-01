@@ -30,7 +30,7 @@ export default function TrackRow({ track, index }: { track: Track; index: number
 
   return (
     <div
-      className="group flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-2.5 rounded-xl hover:bg-white/[0.04] transition fade-up"
+      className="group flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-2.5 rounded-xl hover:bg-[var(--hover)] transition fade-up"
       style={{ animationDelay: `${Math.min(index * 25, 500)}ms` }}
     >
       <span className="w-5 text-right text-xs text-[var(--muted)] tabular-nums hidden sm:block">
@@ -42,8 +42,8 @@ export default function TrackRow({ track, index }: { track: Track; index: number
         onClick={() => toggle(track.id, () => resolvePreview(track))}
         className={`grid place-items-center w-9 h-9 rounded-full shrink-0 transition border ${
           playing
-            ? 'bg-[var(--accent)] border-[var(--accent)] text-black'
-            : 'bg-white/5 border-white/15 text-white hover:bg-[var(--accent)] hover:border-[var(--accent)] hover:text-black'
+            ? 'bg-[var(--accent)] border-[var(--accent)] text-[var(--on-amber)]'
+            : 'bg-[var(--hover)] border-[var(--line-strong)] text-[var(--text)] hover:bg-[var(--accent)] hover:border-[var(--accent)] hover:text-[var(--on-amber)]'
         }`}
         title={playing ? 'Pause preview' : 'Play 30s preview'}
         aria-label={playing ? 'Pause preview' : 'Play preview'}
@@ -66,7 +66,7 @@ export default function TrackRow({ track, index }: { track: Track; index: number
         // eslint-disable-next-line @next/next/no-img-element
         <img src={track.albumArt} alt="" className="w-11 h-11 rounded-md object-cover shadow shrink-0" />
       ) : (
-        <div className="w-11 h-11 rounded-md bg-white/10 shrink-0" />
+        <div className="w-11 h-11 rounded-md bg-[var(--chip)] shrink-0" />
       )}
 
       <div className="min-w-0 flex-1">

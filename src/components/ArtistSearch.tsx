@@ -62,11 +62,15 @@ export default function ArtistSearch({
         {selected.map((a) => (
           <span
             key={a.id}
-            className={`inline-flex items-center gap-2 rounded-full pl-1 pr-3 py-1 text-sm border ${
+            className="inline-flex items-center gap-2 rounded-full pl-1 pr-3 py-1 text-sm border"
+            style={
               exclude
-                ? 'bg-[var(--accent-3)]/15 border-[var(--accent-3)]/40'
-                : 'bg-white/10 border-white/10'
-            }`}
+                ? {
+                    background: 'color-mix(in oklch, var(--accent-3) 14%, transparent)',
+                    borderColor: 'color-mix(in oklch, var(--accent-3) 40%, transparent)',
+                  }
+                : { background: 'var(--chip)', borderColor: 'var(--line)' }
+            }
           >
             {a.images?.[2]?.url || a.images?.[0]?.url ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -76,14 +80,14 @@ export default function ArtistSearch({
                 className="w-6 h-6 rounded-full object-cover"
               />
             ) : (
-              <span className="w-6 h-6 rounded-full bg-white/10 grid place-items-center text-xs">
+              <span className="w-6 h-6 rounded-full bg-[var(--chip)] grid place-items-center text-xs">
                 {a.name[0]}
               </span>
             )}
             {a.name}
             <button
               onClick={() => onRemove(a.id)}
-              className="text-[var(--muted)] hover:text-white transition"
+              className="text-[var(--muted)] hover:text-[var(--text)] transition"
               aria-label={`Remove ${a.name}`}
             >
               ✕
@@ -97,13 +101,13 @@ export default function ArtistSearch({
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => results.length && setOpen(true)}
         placeholder={placeholder}
-        className={`w-full rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-sm outline-none transition placeholder:text-[var(--muted)] ${
-          exclude ? 'focus:border-[var(--accent-3)]/60' : 'focus:border-[var(--accent)]/60'
+        className={`w-full rounded-xl bg-[var(--input-bg)] border border-[var(--line)] px-4 py-3 text-sm outline-none transition placeholder:text-[var(--muted)] ${
+          exclude ? 'focus:border-[var(--accent-3)]' : 'focus:border-[var(--accent)]'
         }`}
       />
 
       {open && (results.length > 0 || loading) && (
-        <div className="absolute z-20 mt-2 w-full rounded-xl bg-[#13111c] border border-white/10 shadow-2xl overflow-hidden max-h-72 overflow-y-auto">
+        <div className="absolute z-20 mt-2 w-full rounded-xl bg-[var(--surface)] border border-[var(--line)] shadow-2xl overflow-hidden max-h-72 overflow-y-auto">
           {loading && <div className="px-4 py-3 text-sm text-[var(--muted)]">Searching…</div>}
           {results.map((a) => (
             <button
@@ -115,7 +119,7 @@ export default function ArtistSearch({
                 setResults([]);
                 setOpen(false);
               }}
-              className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/5 transition text-left disabled:opacity-40"
+              className="w-full flex items-center gap-3 px-3 py-2 hover:bg-[var(--hover)] transition text-left disabled:opacity-40"
             >
               {a.images?.[2]?.url || a.images?.[0]?.url ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -125,7 +129,7 @@ export default function ArtistSearch({
                   className="w-9 h-9 rounded-full object-cover"
                 />
               ) : (
-                <span className="w-9 h-9 rounded-full bg-white/10 grid place-items-center">
+                <span className="w-9 h-9 rounded-full bg-[var(--chip)] grid place-items-center">
                   {a.name[0]}
                 </span>
               )}

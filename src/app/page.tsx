@@ -7,6 +7,7 @@ import ArtistSearch from '@/components/ArtistSearch';
 import SeedSongSearch, { SeedTrack } from '@/components/SeedSongSearch';
 import TrackRow from '@/components/TrackRow';
 import Logo from '@/components/Logo';
+import ThemeToggle from '@/components/ThemeToggle';
 import { stop as stopPreview } from '@/lib/previewPlayer';
 
 // Italian tempo marking for a BPM — a music-literate signature detail.
@@ -300,29 +301,35 @@ export default function Home() {
             <p className="label-spec mt-1">BPM · Playlist Engine</p>
           </div>
         </div>
-        {auth.loggedIn ? (
-          <div className="flex items-center gap-3 text-sm">
-            <span className="text-[var(--muted)] hidden sm:inline">
-              {auth.user ? `Hi, ${auth.user}` : 'Connected'}
-            </span>
-            <button onClick={logout} className="text-[var(--muted)] hover:text-[var(--text)] transition">
-              Log out
-            </button>
-          </div>
-        ) : (
-          <a
-            href="/api/auth/login"
-            className="inline-flex items-center gap-2 text-sm font-medium rounded-full px-4 py-2 transition"
-            style={{
-              color: 'var(--spotify)',
-              border: '1px solid color-mix(in oklch, var(--spotify) 45%, transparent)',
-              background: 'color-mix(in oklch, var(--spotify) 10%, transparent)',
-            }}
-          >
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--spotify)' }} />
-            Connect Spotify
-          </a>
-        )}
+        <div className="flex items-center gap-2.5">
+          <ThemeToggle />
+          {auth.loggedIn ? (
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-[var(--muted)] hidden sm:inline">
+                {auth.user ? `Hi, ${auth.user}` : 'Connected'}
+              </span>
+              <button
+                onClick={logout}
+                className="text-[var(--muted)] hover:text-[var(--text)] transition"
+              >
+                Log out
+              </button>
+            </div>
+          ) : (
+            <a
+              href="/api/auth/login"
+              className="inline-flex items-center gap-2 text-sm font-medium rounded-full px-4 py-2 transition"
+              style={{
+                color: 'var(--spotify)',
+                border: '1px solid color-mix(in oklch, var(--spotify) 45%, transparent)',
+                background: 'color-mix(in oklch, var(--spotify) 10%, transparent)',
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--spotify)' }} />
+              Connect Spotify
+            </a>
+          )}
+        </div>
       </header>
 
       {/* Hero / controls */}
@@ -378,7 +385,7 @@ export default function Home() {
               <button
                 key={label}
                 onClick={() => setBpm(v)}
-                className="rounded-lg border border-white/10 py-1.5 text-xs hover:bg-white/5 transition"
+                className="rounded-lg border border-[var(--line)] py-1.5 text-xs hover:bg-[var(--hover)] transition"
               >
                 {label}
                 <span className="block text-[10px] text-[var(--muted)]">{v}</span>
@@ -414,12 +421,18 @@ export default function Home() {
             </label>
             <SeedSongSearch onPick={handlePickSeed} loading={seedLoading} />
             {seed && (
-              <div className="mt-3 flex items-center gap-3 rounded-xl border border-[var(--accent-2)]/35 bg-[var(--accent-2)]/10 px-3 py-2 fade-up">
+              <div
+                className="mt-3 flex items-center gap-3 rounded-xl px-3 py-2 fade-up"
+                style={{
+                  border: '1px solid color-mix(in oklch, var(--accent-2) 35%, transparent)',
+                  background: 'color-mix(in oklch, var(--accent-2) 12%, transparent)',
+                }}
+              >
                 {seed.albumArt ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={seed.albumArt} alt="" className="w-9 h-9 rounded object-cover" />
                 ) : (
-                  <span className="w-9 h-9 rounded bg-white/10" />
+                  <span className="w-9 h-9 rounded bg-[var(--chip)]" />
                 )}
                 <div className="min-w-0 flex-1 text-sm">
                   <div className="truncate">
@@ -431,7 +444,7 @@ export default function Home() {
                 </div>
                 <button
                   onClick={clearSeed}
-                  className="text-[var(--muted)] hover:text-white transition text-sm"
+                  className="text-[var(--muted)] hover:text-[var(--text)] transition text-sm"
                   aria-label="Clear seed song"
                 >
                   ✕
@@ -440,7 +453,7 @@ export default function Home() {
             )}
           </div>
 
-          <div className="h-px bg-white/8" />
+          <div className="h-px bg-[var(--chip)]" />
 
           <div>
             <label className="text-sm font-medium block mb-3">Genres</label>
@@ -453,8 +466,8 @@ export default function Home() {
                     onClick={() => toggleGenre(g)}
                     className={`rounded-full px-3 py-1.5 text-sm capitalize border transition ${
                       on
-                        ? 'bg-[var(--accent)] text-black border-transparent font-medium'
-                        : 'border-white/12 text-[var(--text)] hover:bg-white/5'
+                        ? 'bg-[var(--accent)] text-[var(--on-amber)] border-transparent font-medium'
+                        : 'border-[var(--line)] text-[var(--text)] hover:bg-[var(--hover)]'
                     }`}
                   >
                     {g.replace(/-/g, ' ')}
@@ -578,7 +591,7 @@ export default function Home() {
           >
             {loading ? (
               <span className="inline-flex items-center gap-2">
-                <span className="spin inline-block w-4 h-4 border-2 border-black/30 border-t-black rounded-full" />
+                <span className="spin inline-block w-4 h-4 border-2 border-[var(--on-amber)] border-t-transparent rounded-full" />
                 Finding tracks…
               </span>
             ) : (
@@ -617,13 +630,13 @@ export default function Home() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={copyLinks}
-                className="rounded-full border border-white/15 px-4 py-2 text-sm hover:bg-white/5 transition"
+                className="rounded-full border border-[var(--line-strong)] px-4 py-2 text-sm hover:bg-[var(--hover)] transition"
               >
                 Copy links
               </button>
               <button
                 onClick={downloadCsv}
-                className="rounded-full border border-white/15 px-4 py-2 text-sm hover:bg-white/5 transition"
+                className="rounded-full border border-[var(--line-strong)] px-4 py-2 text-sm hover:bg-[var(--hover)] transition"
               >
                 Download CSV
               </button>
@@ -661,12 +674,12 @@ export default function Home() {
           )}
 
           {result.tracks.length === 0 ? (
-            <div className="rounded-2xl border border-white/10 bg-[var(--panel)] p-8 text-center text-[var(--muted)]">
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-8 text-center text-[var(--muted)]">
               No tracks matched. Try widening the tolerance, enabling half/double-time, or picking
               broader genres/artists.
             </div>
           ) : (
-            <div className="rounded-2xl border border-white/10 bg-[var(--panel)] backdrop-blur divide-y divide-white/5 overflow-hidden">
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] backdrop-blur divide-y divide-[var(--divide)] overflow-hidden">
               {result.tracks.map((t, i) => (
                 <TrackRow key={t.id} track={t} index={i} />
               ))}
@@ -680,7 +693,10 @@ export default function Home() {
       </footer>
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white text-black text-sm font-medium px-5 py-2.5 shadow-2xl fade-up z-50">
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full text-sm font-medium px-5 py-2.5 shadow-2xl fade-up z-50"
+          style={{ background: 'var(--text)', color: 'var(--bg)' }}
+        >
           {toast}
         </div>
       )}
